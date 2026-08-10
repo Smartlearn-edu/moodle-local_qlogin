@@ -1,4 +1,19 @@
 <?php
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+
 require_once('../../config.php');
 require_once($CFG->libdir . '/authlib.php');
 require_once($CFG->dirroot . '/user/lib.php');
@@ -20,7 +35,6 @@ $action = optional_param('action', 'login', PARAM_ALPHA);
 $error_msg = '';
 
 if ($data = data_submitted()) {
-
     // --- HONEYPOT TRAP ---
     $trap = isset($data->username) ? $data->username : '';
     if (!empty($trap)) {
@@ -45,15 +59,15 @@ if ($data = data_submitted()) {
             $valid_input = false;
         }
     } else {
-        if (empty($clean_phone)) $valid_input = false;
+        if (empty($clean_phone)) {
+            $valid_input = false;
+        }
     }
 
     if (!$valid_input || empty($password)) {
         $error_msg = get_string('error_phone_required', 'local_qlogin');
     } else {
-
         if ($form_action === 'login') {
-
             // LOGIC: DETERMINE LOGIN SOURCE (Phone or Username)
             $login_input = '';
 
@@ -62,7 +76,7 @@ if ($data = data_submitted()) {
                 $login_input = clean_param($data->login_username, PARAM_RAW); // Allow letters/mixed
             }
             // Else fallback to Phone field
-            elseif (!empty($clean_phone)) {
+            else if (!empty($clean_phone)) {
                 $login_input = $clean_phone; // Numbers only
             }
 
@@ -75,7 +89,7 @@ if ($data = data_submitted()) {
             } else {
                 $error_msg = get_string('error_auth_failed', 'local_qlogin');
             }
-        } elseif ($form_action === 'register') {
+        } else if ($form_action === 'register') {
             // Check duplicate
             if ($DB->record_exists('user', ['username' => $clean_phone, 'deleted' => 0])) {
                 $error_msg = get_string('error_user_exists', 'local_qlogin');
@@ -131,9 +145,9 @@ echo $OUTPUT->header();
 
         <!-- Site Logo / Name -->
         <div class="qlogin-logo">
-            <?php if ($logourl): ?>
+            <?php if ($logourl) : ?>
                 <img src="<?php echo $logourl; ?>" alt="<?php echo $sitename; ?>">
-            <?php else: ?>
+            <?php else : ?>
                 <div class="site-name"><?php echo $sitename; ?></div>
             <?php endif; ?>
         </div>
@@ -147,7 +161,7 @@ echo $OUTPUT->header();
         <h2 class="form-title" id="form-title">Welcome Back</h2>
         <p class="form-subtitle" id="form-subtitle">Access your courses.</p>
 
-        <?php if ($error_msg): ?>
+        <?php if ($error_msg) : ?>
             <div class="alert alert-danger"><?php echo $error_msg; ?></div>
         <?php endif; ?>
 
@@ -232,11 +246,11 @@ echo $OUTPUT->header();
             }
         }
 
-        if ($google_issuer):
+        if ($google_issuer) :
             $login_url = new moodle_url('/auth/oauth2/login.php', [
                 'id' => $google_issuer->get('id'),
                 'sesskey' => sesskey(),
-                'wantsurl' => $CFG->wwwroot . '/my/'
+                'wantsurl' => $CFG->wwwroot . '/my/',
             ]);
         ?>
             <div class="divider"><span>OR</span></div>

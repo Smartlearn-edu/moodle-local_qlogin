@@ -1,7 +1,24 @@
 <?php
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+
 require_once('../../config.php');
 require_once($CFG->libdir . '/authlib.php');
 require_once($CFG->dirroot . '/user/lib.php');
+
+// phpcs:disable moodle.Files.RequireLogin.Missing
 
 $context = context_system::instance();
 $PAGE->set_context($context);
@@ -11,32 +28,31 @@ $PAGE->set_title(get_string('pluginname', 'local_qlogin') . ' - Forgot Password'
 
 // Plugin Dependency Check
 if (!class_exists('\local_verify_phone\otp')) {
-    print_error('The local_verify_phone plugin is required but missing.');
+    throw new moodle_exception('The local_verify_phone plugin is required but missing.');
 }
 
 $PAGE->requires->css('/local/qlogin/qlogin_styles.css');
 
 $step = optional_param('step', 'phone', PARAM_ALPHA);
-$error_msg = '';
-$success_msg = '';
+$errormsg = '';
+$successmsg = '';
 
-$PHONE_SESSION_KEY = 'qlogin_forgot_password';
+$phonesessionkey = 'qlogin_forgot_password';
 
 if ($data = data_submitted()) {
-
     // --- STEP 1: SUBMIT PHONE ---
     if ($step === 'phone') {
         $phone = isset($data->mobile_num) ? clean_param($data->mobile_num, PARAM_NOTAGS) : '';
         // Clean phone (digits only)
-        $clean_phone = preg_replace('/[^0-9]/', '', $phone);
+        $cleanphone = preg_replace('/[^0-9]/', '', $phone);
 
-        if (empty($clean_phone)) {
-            $error_msg = 'Please enter a valid phone number.';
+        if (empty($cleanphone)) {
+            $errormsg = 'Please enter a valid phone number.';
         } else {
             // Check if user exists with this username (phone)
-            $user = $DB->get_record('user', ['username' => $clean_phone, 'deleted' => 0, 'suspended' => 0]);
+            $user = $DB->get_record('user', ['username' => $cleanphone, 'deleted' => 0, 'suspended' => 0]);
 
-            // SECURITY: Generic message even if user not found to prevent enumeration? 
+            // SECURITY: Generic message even if user not found to prevent enumeration?
             // For now, let's just be direct as per request context, but secure side would verify phone actually belongs to user.
 
             if (!$user) {
@@ -44,75 +60,73 @@ if ($data = data_submitted()) {
                 // The requirements said: verify user exists with that verified phone number.
                 // In qlogin, username IS the phone number usually.
                 // Let's also check phone1 field just in case.
-                $user = $DB->get_record('user', ['phone1' => $clean_phone, 'deleted' => 0, 'suspended' => 0]);
+                $user = $DB->get_record('user', ['phone1' => $cleanphone, 'deleted' => 0, 'suspended' => 0]);
             }
 
             if ($user) {
                 // Send OTP
                 // We use the existing otp class.
                 // verify_phone\otp::send returns otpdata array on success, false on failure.
-                $otp_data = \local_verify_phone\otp::send($clean_phone, $user);
+                $otpdata = \local_verify_phone\otp::send($cleanphone, $user);
 
-                if ($otp_data) {
-                    $SESSION->$PHONE_SESSION_KEY = [
-                        'phone' => $clean_phone,
+                if ($otpdata) {
+                    $SESSION->$phonesessionkey = [
+                        'phone' => $cleanphone,
                         'userid' => $user->id,
-                        'otp_data' => $otp_data,
-                        'timestamp' => time()
+                        'otp_data' => $otpdata,
+                        'timestamp' => time(),
                     ];
                     $step = 'otp'; // Move to next step
                 } else {
-                    $error_msg = 'Failed to send OTP. Please try again later.';
+                    $errormsg = 'Failed to send OTP. Please try again later.';
                 }
             } else {
-                $error_msg = 'No account found with this phone number.';
+                $errormsg = 'No account found with this phone number.';
             }
         }
-    }
+    } else if ($step === 'otp') {
+        // --- STEP 2: VERIFY OTP ---
+        $enteredotp = isset($data->otp_code) ? clean_param($data->otp_code, PARAM_NOTAGS) : '';
 
-    // --- STEP 2: VERIFY OTP ---
-    elseif ($step === 'otp') {
-        $entered_otp = isset($data->otp_code) ? clean_param($data->otp_code, PARAM_NOTAGS) : '';
-
-        if (empty($SESSION->$PHONE_SESSION_KEY)) {
+        if (empty($SESSION->$phonesessionkey)) {
             redirect(new moodle_url('/local/qlogin/forgot_password.php'), 'Session expired. Please try again.', 3);
         }
 
-        $session_data = $SESSION->$PHONE_SESSION_KEY;
-        $user = $DB->get_record('user', ['id' => $session_data['userid']]);
+        $sessiondata = $SESSION->$phonesessionkey;
+        $user = $DB->get_record('user', ['id' => $sessiondata['userid']]);
 
         // Validate OTP
         // Using verify_phone\otp::validate($otpdata, $otp, $user)
-        if ($user && \local_verify_phone\otp::validate($session_data['otp_data'], $entered_otp, $user)) {
+        if ($user && \local_verify_phone\otp::validate($sessiondata['otp_data'], $enteredotp, $user)) {
             // SUCCESS!
 
             // 1. Generate new password
-            $new_password = generate_password(8) . '@' . mt_rand(100, 999); // Ensure complexity: Uppercase, Lowercase, Special char handling often needed.
+            $newpassword = generate_password(8) . '@' . mt_rand(100, 999); // Ensure complexity: Uppercase, Lowercase, Special char handling often needed.
             // Moodle default policy usually requires 1 Usercase, 1 Lowercase, 1 Digit, 1 Symbol.
             // generate_password() creates random string, might not satisfy policy.
             // Let's force it:
-            $new_password = 'U' . strtolower(generate_password(6)) . mt_rand(1, 9) . '#';
+            $newpassword = 'U' . strtolower(generate_password(6)) . mt_rand(1, 9) . '#';
 
             // 2. Update User Password
-            $user_auth = get_auth_plugin($user->auth);
-            if ($user_auth->can_change_password()) {
-                $user_auth->user_update_password($user, $new_password);
+            $userauth = get_auth_plugin($user->auth);
+            if ($userauth->can_change_password()) {
+                $userauth->user_update_password($user, $newpassword);
                 // set_user_preference('auth_forcepasswordchange', 1, $user); // Optional: Force change on next login
 
                 // 3. Send SMS
-                $msg = "Password Reset: Your new password is {$new_password} . Please log in and change it.";
-                \local_verify_phone\otp::send_custom_message($session_data['phone'], $msg);
+                $msg = "Password Reset: Your new password is {$newpassword} . Please log in and change it.";
+                \local_verify_phone\otp::send_custom_message($sessiondata['phone'], $msg);
 
                 // Clear Session
-                unset($SESSION->$PHONE_SESSION_KEY);
+                unset($SESSION->$phonesessionkey);
 
                 $step = 'finish';
-                $success_msg = 'Password has been reset and sent to your phone.';
+                $successmsg = 'Password has been reset and sent to your phone.';
             } else {
-                $error_msg = 'Cannot reset password for this account type (Auth: ' . $user->auth . ').';
+                $errormsg = 'Cannot reset password for this account type (Auth: ' . $user->auth . ').';
             }
         } else {
-            $error_msg = 'Invalid OTP or expired. Please try again.';
+            $errormsg = 'Invalid OTP or expired. Please try again.';
             $step = 'otp'; // Stay on OTP step
         }
     }
@@ -129,28 +143,28 @@ echo $OUTPUT->header();
 <div id="qlogin-wrapper">
     <div class="qlogin-card">
         <div class="qlogin-logo">
-            <?php if ($OUTPUT->get_logo_url()): ?>
+            <?php if ($OUTPUT->get_logo_url()) : ?>
                 <img src="<?php echo $OUTPUT->get_logo_url(); ?>" alt="<?php echo format_string($SITE->fullname); ?>">
-            <?php else: ?>
+            <?php else : ?>
                 <div class="site-name"><?php echo format_string($SITE->fullname); ?></div>
             <?php endif; ?>
         </div>
 
         <h2 class="form-title">Reset Password</h2>
 
-        <?php if ($error_msg): ?>
-            <div class="alert alert-danger"><?php echo $error_msg; ?></div>
+        <?php if ($errormsg) : ?>
+            <div class="alert alert-danger"><?php echo $errormsg; ?></div>
         <?php endif; ?>
 
-        <?php if ($success_msg): ?>
-            <div class="alert alert-success"><?php echo $success_msg; ?></div>
+        <?php if ($successmsg) { ?>
+            <div class="alert alert-success"><?php echo $successmsg; ?></div>
             <a href="index.php" class="btn btn-primary btn-block">Back to Login</a>
-        <?php elseif ($step === 'finish'): ?>
+        <?php } else if ($step === 'finish') { ?>
             <a href="index.php" class="btn btn-primary btn-block">Back to Login</a>
 
-        <?php elseif ($step === 'otp'): ?>
+        <?php } else if ($step === 'otp') { ?>
             <!-- OTP FORM -->
-            <p class="form-subtitle">Enter the 6-digit code sent to <?php echo $SESSION->$PHONE_SESSION_KEY['phone'] ?? 'your phone'; ?>.</p>
+            <p class="form-subtitle">Enter the 6-digit code sent to <?php echo $SESSION->$phonesessionkey['phone'] ?? 'your phone'; ?>.</p>
             <form method="post" action="forgot_password.php">
                 <input type="hidden" name="step" value="otp">
                 <div class="form-group">
@@ -160,7 +174,7 @@ echo $OUTPUT->header();
                 <button type="submit" class="btn-primary">Verify & Reset</button>
             </form>
 
-        <?php else: ?>
+        <?php } else { ?>
             <!-- PHONE FORM -->
             <p class="form-subtitle">Enter your registered mobile number to receive a temporary password.</p>
             <form method="post" action="forgot_password.php" id="reset-form">
@@ -200,7 +214,7 @@ echo $OUTPUT->header();
                     }
                 }
             </script>
-        <?php endif; ?>
+        <?php } ?>
 
     </div>
 </div>

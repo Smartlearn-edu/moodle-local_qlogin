@@ -14,18 +14,24 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
+namespace local_qlogin\privacy;
+
+use core_privacy\local\metadata\null_provider;
+
 /**
- * Plugin version and specification.
+ * Privacy provider implementation for local_qlogin.
  *
  * @package    local_qlogin
  * @copyright  2025 Mohammad Nabil <mohammad@smartlearn.education>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-$plugin->component = 'local_qlogin';
-$plugin->version = 2024010803;
-$plugin->requires = 2022112800; // Requires Moodle 4.1+.
-$plugin->maturity = MATURITY_STABLE;
-$plugin->release = '1.0.0';
+class provider implements null_provider {
+    /**
+     * Get the language string identifier with the explanation reason why this plugin stores no data.
+     *
+     * @return string
+     */
+    public static function get_reason(): string {
+        return 'privacy:metadata';
+    }
+}
